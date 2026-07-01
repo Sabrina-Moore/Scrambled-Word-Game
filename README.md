@@ -7,3 +7,4 @@ I'm making a game where the code calls a random word generator API, takes that w
 
 The user interacts with a textField that also shows them an error maessage if the guess was invalid. The user can make multiple guesses and skip to a new word. There will also be a history panel on the side tracking their guesses. 
 
+# Scrambled-Word-Game
