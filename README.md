@@ -1,16 +1,9 @@
-# React + Vite
+# Scrambled-word-Game
+The player unscrambles a word. They can skip if they want, and they can see their guess history. 
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Structure
 
-Currently, two official plugins are available:
+I'm making a game where the code calls a random word generator API, takes that word and scrambles it. The user then attempts to guess an anagram of the word (any valid word that uses the exact same letters) and the code checks if the letters are valid by fetching from a dictionary API to see if the word is a real word. 
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The user interacts with a textField that also shows them an error maessage if the guess was invalid. The user can make multiple guesses and skip to a new word. There will also be a history panel on the side tracking their guesses. 
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
