@@ -12,50 +12,79 @@ import Typography from '@mui/material/Typography';
 import './App.css'
 
 
-//TODO: scramble logic
-//finish states and state variables
-//check conditions
-//add panel history
+//finish and correct states and state variables
+//write check conditions logic
+//write panel history feature logic
+
+//TODO: edge case - are the random words too long to be solvable? do I need to control for length as well as commonality?
+
+
+//TODO: needs to generate a word on website load - currently only fetches word on button click
+//let user choose length or difficulty? Slider? Options? 
+
+//Issue fixed with linking scrambleWord function to searchForWord function: I misunderstood what I was 
+//getting from the API - I thought I was getting a string, but I was actually receiving an array 
+//so my split() method was wrong
+
 
 
 function App() {
 
-  const [word, setWord] = useState(""); //store random word from random word API
+  const [word, setWord] = useState(""); //store random word from random word API for hash map conversion
 
   const [guess, setGuess] = useState(""); //store user input
 
   const [scrambled, setScrambled] = useState(""); //store scrambled string
 
   //------------------------------------------------------------------------
-  //get random word
-
-  
+  //get random word from API https://random-word-api.herokuapp.com/word with parameters for length or diff
+  const searchForWord = () => {
+    fetch(`https://random-word-api.herokuapp.com/word?number=1&diff=2`)
+      .then((response) => (response.json()))
+      .then((data) => {
+        setWord(data[0]); //set word here for validity checks later
+        scrambleWord(data[0]); //call scrambleWord function
+      })
+      .catch((error) => console.error(error));
+  }
+  console.log(word);
 
   //------------------------------------------------------------------------
   //scramble word - fisher yates shuffle
+  const scrambleWord = (tempWord) => {
+    //convert word array to array of letters
+    const scrambled = tempWord.split("");
 
 
+    //shuffle
+    for(let i = scrambled.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i+1));
+      [scrambled[i], scrambled[j]] = [scrambled[j], scrambled[i]];
+    }
 
+    
 
+    //convert to string and return
+    setScrambled(scrambled.join(""));
 
+    console.log(scrambled);
+  }
 
   //------------------------------------------------------------------------
   //check valid letters
-
+ //comparing two hash maps of frequencies of letters
   
-  //hash maps
-  const wordMap = new Map (); //for frequency of letters in scrambled word
+ 
 
-  const guessMap = new Map (); //for frequency of letters in guess
 
-  
   //------------------------------------------------------------------------
   //check valid word using dictionary API
-
-
+  
 
   //------------------------------------------------------------------------
   //TODO: history panel array
+
+
 
   return (
     <>
@@ -81,7 +110,7 @@ function App() {
     <Container>
       <Box
       className="counter" style={{padding: '10px 24px', letterSpacing: '2px', fontWeight: 'bold' }}>
-        Filler word
+        {scrambled}
       </Box>
     </Container>
 
@@ -116,8 +145,8 @@ function App() {
     variant="contained"
     size="large"
     onClick={() => {
-      setGuess(""); //clear guess
-      searchWord(); //fetch a new word
+      setGuess(""); //clears guess
+      searchForWord(); //fetch a new word
     }}
     sx={{ 
             px: 4, 
