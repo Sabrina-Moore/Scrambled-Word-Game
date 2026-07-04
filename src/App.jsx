@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import React from 'react';
 
 import Button from '@mui/material/Button';
@@ -18,23 +18,30 @@ import './index.css';
 
 
 //-----------------------------------------------------------------------------
-//TODO: edge case issue where "incorrect" and "correct" helpertext not always updating on guesses
-
-//TODO: do I need to change API's?
+//TODO: add points system (points = guess.length)
 
 //TODO: edge case - are the random words too long to be solvable? do I need to control for length as well as commonality?
 //let user choose length or difficulty? Slider? Options? 
 
-//TODO: needs to generate a word on website load - currently only fetches word on button click
+//TODO: Issue where performance and speed has reduced
+
+//TODO: need a dictionary check before word is rendered 
+
 
 //-----------------------------------------------------------------------------
 //fixed issues
 
+//Issue where site needs to generate a word on website load - currently only fetches word on button click
+
+//Issue where "incorrect" and "correct" helpertext not always updating on guesses
+
+//issue fixed where the guess history panel needs to scroll through containers without container resizing
+
 //Issue fixed with text clutter by moving typography game instructions to a modal component "Click here for instructions"
 
-//Issue fixed with linking scrambleWord function to searchForWord function: I misunderstood what I was 
-//getting from the API - I thought I was getting a string, but I was actually receiving an array 
-//so my split() method was wrong
+/*Issue fixed with linking scrambleWord function to searchForWord function: I misunderstood what I was 
+getting from the API - I thought I was getting a string, but I was actually receiving an array 
+so my split() method was wrong*/
 
 
 
@@ -46,10 +53,20 @@ function App() {
 
   const [scrambled, setScrambled] = useState(""); //store scrambled string
 
+  const hasInitialized = useRef(false); //to render a scrambled word on website load
+
   const [isValidGuess, setIsValidGuess] = useState(""); //for textfield error message to user
 
   const [history, setHistory] = useState([]); //for populating the history array and panel
 
+ //------------------------------------------------------------------------
+  //rendering check on website load
+  useEffect(() => {
+  if (hasInitialized.current) return;
+  hasInitialized.current = true;
+
+  searchForWord();
+}, []);
 
   //modal states
   const [open, setOpen] = useState(false);
@@ -62,49 +79,79 @@ function App() {
 
   //------------------------------------------------------------------------
   //get random word from API https://random-word-api.herokuapp.com/word with parameters for length or diff
-  const searchForWord = () => {
-    fetch(`https://random-word-api.herokuapp.com/word?length=5&number=1&diff=1`) //add user input for length instead
-      .then((response) => (response.json()))
-      .then((data) => {
-        setWord(data[0]); //set word here for validity checks later
-        scrambleWord(data[0]); //call scrambleWord function
-      })
-      .catch((error) => console.error(error));
-  }
-  console.log("searchForWord:", word);
+  //call scrambleWord
+  const searchForWord = async () => { //async function
+    try { //if no error
+      let valid = false; //don't have a valid word yet
+      let word = "";
 
-  //TODO
-  //need to do a validity check here before rendering the word - edge cases where the word form isn't appearing in
-  //dicitonary API and so showing not valid
-  //how to loop until valid?
+      while (!valid) { //loop until dictionary returns valid word response
+        const result = await fetch( //returns a response from word generator
+          `https://random-word-api.herokuapp.com/word?length=5&number=1&diff=1`
+        );
 
+        const data = await result.json(); //stores response (array) from word generator
+        word = data[0]; //generator returns an array, and we store the first item in word
+
+        const dictionaryResult = await fetch( //stores response from dictionary
+          `https://api.dictionaryapi.dev/api/v2/entries/en/${word}`
+        );
+
+        if (dictionaryResult.ok) { //if true (response is not a 404 error), stop loop
+          valid = true;
+        }
+      }
+
+      //outside of loop if valid
+      setWord(word); //saves into state
+      console.log("searchForWord", word)
+
+      const scrambled = scrambleWord(word); //call scrambleWord
+      setScrambled(scrambled); //set result of scrambleWord and triggers render
+
+      setHistory(prev => [ //add new round to history
+      ...prev, 
+      {
+        scrambled,
+        guesses: []
+      }
+    ]);
+      } catch(error){
+        console.error(error);
+      }
+  };
+
+  //must fetch random word
+  //validate word via dictionary API (edge case issue where random word generator generates a word not found in dictionary - often because of tenses)
+  //if valid, setWord, call scrambleWord and setScrambled
+  //if invalid, loop
+
+
+  
 
   //------------------------------------------------------------------------
   //scramble word - fisher yates shuffle
   const scrambleWord = (tempWord) => {
     //convert word array to array of letters
-    const scrambled = tempWord.split("");
-
+    const scrambledArr = tempWord.split("");
 
     //shuffle
-    for(let i = scrambled.length - 1; i > 0; i--){
+    for(let i = scrambledArr.length - 1; i > 0; i--){
       const j = Math.floor(Math.random() * (i+1));
-      [scrambled[i], scrambled[j]] = [scrambled[j], scrambled[i]];
+      [scrambledArr[i], scrambledArr[j]] = [scrambledArr[j], scrambledArr[i]];
     }
 
-    
+    console.log("ScrambleWord:", scrambledArr);
 
     //convert to string and return
-    setScrambled(scrambled.join(""));
-
-    console.log("ScrambleWord:", scrambled);
+    return scrambledArr.join("");
   }
   
  //------------------------------------------------------------------------
   //check valid letters
  //comparing two hash maps of frequencies of letters
   
- const LetterCheck = (word, guess) => {
+ const letterCheck = (word, guess) => {
     //hash maps
     const wordMap = new Map (); //for frequency of letters in the original word array
     //word is ['g', 'r', 'a', 's', 's,']
@@ -127,19 +174,16 @@ function App() {
    //guess does not need to include every letter in the original, but can only include letters provided by the original
     for (const [letter, count] of guessMap) { //destructuring
       if ((wordMap.get(letter) || 0) < count) { //if original word contains at least as many occurences of that letter
-      
-      setIsValidGuess("Incorrect. Keep trying!");
-      return false;
+        return false;
       }
     }
     return true;
   }
 
 
-
   //------------------------------------------------------------------------
   //check valid word using dictionary API
-  const validWordCheck = (guess) => {
+   const validWordCheck = (guess) => {
     fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${guess}`)
       .then((response) => {
         if (!response.ok) {
@@ -150,10 +194,12 @@ function App() {
       .then((data) => {
         console.log("validWordCheck: valid word");
         setIsValidGuess("Correct, nice job!"); 
+        historyPanel(guess, true); //after check, regardless of the correctness, prompts history panel
       })
       .catch((error) => {
         console.log("Uknown Error.");
-        setIsValidGuess("Incorrect. Keep trying!");
+        setIsValidGuess("Not a real word, but keep trying!");
+        historyPanel(guess, false); //after check, regardless of the correctness, prompts history panel
       })
   }
   
@@ -163,7 +209,24 @@ function App() {
   //------------------------------------------------------------------------
 // history panel function for history array generation
 //tracks both correct and incorrect guesses
+ const historyPanel = (guess, value) => { //updates history state with new guess
+  setHistory(prev => {
+    if (prev.length === 0) return prev; //if there is no history, do nothing
 
+    const updated = [...prev]; //copy the history array
+    const currentRound = updated[updated.length - 1]; //gets the current round  (last element is current round)
+
+    const alreadyGuessed = currentRound.guesses.some( //checks if guess is already in current round
+      g => g.guess.toLowerCase() === guess.toLowerCase()
+    );
+
+    if (alreadyGuessed) return prev; //if already guessed, do nothing
+
+    currentRound.guesses.push({ guess, value }); //update state for history rendering
+
+    return updated;
+  });
+};
 
   //------------------------------------------------------------------------
   return (
@@ -223,9 +286,12 @@ function App() {
                 <Typography id="modal-modal-title" variant="h6" component="h2" sx={{textAlign: 'center'}}>
                   How To Play
                 </Typography>
-                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
-                  Guesses do not need to include every letter from the scrambled word, but they also can't contain any letters not in the scrambled word. 
-                  There may be one or more possible real words that work for each scrambled word.  </Typography>
+                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
+                <ul>
+                  <li> Guesses do not need to include every letter from the scrambled word, but they also can't contain any letters not in the scrambled word.  </li>
+                  <li> There may be one or more possible real words that work for each scrambled word.</li>
+                </ul>
+                </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
                   Winning conditions... </Typography>
               </Box>
@@ -286,16 +352,18 @@ function App() {
             textAlign: 'center',
             }}>
           <Stack spacing={2} direction="row">
+            {/*Guess button */}
             <Button 
               variant="contained"
               size="large"
               onClick={() => {
                 console.log("User guesed:", guess);
-                if(LetterCheck(word, guess)){
-                  if (validWordCheck(guess)){
-                    console.log("guess button: guess is valid");
-                  }
-                } else if (!LetterCheck(word,guess)){
+                if(letterCheck(word, guess)){
+                  validWordCheck(guess)
+                  console.log("guess button: guess is valid");
+          
+                } else if (!letterCheck(word,guess)){
+                  setIsValidGuess("Try again using the letters from the scrambled word.");
                   console.log("guess button: Guess is invalid");}
                 }}
               sx={{ 
@@ -305,6 +373,7 @@ function App() {
                 }}>
             Guess
           </Button>
+          {/*New Word button */}
           <Button 
             variant="contained"
             size="large"
@@ -321,6 +390,8 @@ function App() {
           </Button>
         </Stack>
       </Box>
+
+        {/* How this game was made modal */}
       <Container>
         <Button 
             sx = {{
@@ -328,7 +399,6 @@ function App() {
             }}
             onClick={handle2ndOpen}>HOW THIS GAME WAS MADE
         </Button>
-        {/* How this game was made modal */}
         <Modal 
               open={open2nd}
               onClose={handle2ndClose}
@@ -355,8 +425,10 @@ function App() {
                   <li> More optional stuff here.</li>
                 </ul>
                 </Typography>
+                    <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
+                  This game uses an API - think of it like a database stored on the internet - to generate a random word. </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
-                  The databases used to get the random word generator and to then check against the dictionary are not perfect and so may include mistakes. </Typography>
+                  The code for the website then scrambles the word randomly and the user can make their guess using a textField component and buttons.  </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
                   Think of this game as checking for "anagrams" which are words that can be rearranged into multiple other words: </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
@@ -372,10 +444,85 @@ function App() {
   </Box>
 
         {/* Right side of screen */}
-      {/* History Panel */}
+      {/* History Panel as a vertical scroll container*/}
   <Box sx={{ flex: 1 }}>
-  
-  </Box>
+  <Card
+    sx={{
+      width: 320,
+      height: "80vh",
+      bgcolor: "#16171d",
+      color: "white",
+      border: "1px solid #333",
+      position: "sticky",
+
+      display: "flex",
+      flexDirection: "column",
+    }}
+  >
+    <CardContent sx={{ display: "flex", flex: 1, flexDirection: "column" }}>
+      <Typography variant="h5" gutterBottom>
+        Guess History
+      </Typography>
+
+      {/* Vertical scroll container */}
+  <Box
+  sx={{
+    display: "flex",
+    flexDirection: "column",
+    overflowY: "auto",
+    maxHeight: "65vh",
+  }}
+>
+  {history.map((round, roundIndex) => (
+    <Box key={roundIndex} sx={{ mb: 3 }}>
+      
+      {/* Round header */}
+      <Typography
+        sx={{
+          textAlign: "center",
+          fontWeight: "bold",
+          color: "#90caf9",
+          mb: 1,
+          letterSpacing: 2,
+        }}
+      >
+       {(round.scrambled ?? "").toUpperCase()}
+      </Typography>
+
+      {/* guesses */}
+      {round.guesses.map((item, index) => (
+        <Card key={index} sx={{ mb: 1, color: "white", bgcolor: "#22242c" }}>
+          <CardContent
+            sx={{
+              py: 1,
+              pb: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              justifyContent: "center",
+            }}
+          >
+            <Typography variant="body2">
+              {item.guess}
+            </Typography>
+
+            <Typography
+              variant="body2"
+              color={item.value ? "success.main" : "error.main"}
+            >
+              {item.value ? "✓" : "x"}
+            </Typography>
+          </CardContent>
+        </Card>
+        ))}
+        </Box>
+      ))}
+      </Box>
+    </CardContent>
+  </Card>
+</Box>
+
+
 </Box>
 
 </>
