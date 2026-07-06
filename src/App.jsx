@@ -14,26 +14,37 @@ import CardActions from '@mui/material/CardActions';
 import CardContent from '@mui/material/CardContent';
 
 import Modal from '@mui/material/Modal';
+import Snackbar from '@mui/material/Snackbar';
 import './index.css';
 
 
 //-----------------------------------------------------------------------------
-//TODO: add points system (points = guess.length)
+
+//Stretch milestones: guess panel tracking correct and points, points system, answer snackbar, enter key, scoreboard/leaderboard
+
+//TODO: make enter key also activate guess
 
 //TODO: edge case - are the random words too long to be solvable? do I need to control for length as well as commonality?
 //let user choose length or difficulty? Slider? Options? 
 
-//TODO: Issue where performance and speed has reduced
-
-//TODO: need a dictionary check before word is rendered 
-
-
 //-----------------------------------------------------------------------------
 //fixed issues
 
-//Issue where site needs to generate a word on website load - currently only fetches word on button click
+//Added feature for points system and tracking 
 
-//Issue where "incorrect" and "correct" helpertext not always updating on guesses
+//Issue fixed with edge case where duplicate guesses were adding to total points despite alreadyGuessed check, fixed by handling inside handleGuess()
+
+//issue fixed with streamlining functions and things not executing at the right step - created new function handleGuess() to run states and most execution
+
+//issue fixed with edge case where capital letters not read in user guess - set word and guess to lower in letterCheck()
+
+//Issue fixed with edge case where word generator was using words not found in dictionary API, so added additional dictionary check in searchForWord
+
+//Issue fixed of how to show the real answer - created a snackbar that allows the user to optionally see the real answer
+
+//Issue fixed where site needs to generate a word on website load - currently only fetches word on button click
+
+//Issue fixed where "incorrect" and "correct" helpertext not always updating on guesses
 
 //issue fixed where the guess history panel needs to scroll through containers without container resizing
 
@@ -59,6 +70,8 @@ function App() {
 
   const [history, setHistory] = useState([]); //for populating the history array and panel
 
+  const [points, setPoints] = useState(0); //for points
+
  //------------------------------------------------------------------------
   //rendering check on website load
   useEffect(() => {
@@ -68,6 +81,7 @@ function App() {
   searchForWord();
 }, []);
 
+
   //modal states
   const [open, setOpen] = useState(false);
   const handleOpen = () => setOpen(true);
@@ -76,6 +90,10 @@ function App() {
   const[open2nd, setOpen2nd] = useState(false);
   const handle2ndOpen = () => setOpen2nd(true);
   const handle2ndClose = () => setOpen2nd(false);
+
+  const [openSnackBar, setOpenSnackBar] = useState(false);
+  const handleSnackBarClick = () => {setOpenSnackBar(true)};
+  const handleSnackBarClose = () => {setOpenSnackBar(false)};
 
   //------------------------------------------------------------------------
   //get random word from API https://random-word-api.herokuapp.com/word with parameters for length or diff
@@ -87,7 +105,7 @@ function App() {
 
       while (!valid) { //loop until dictionary returns valid word response
         const result = await fetch( //returns a response from word generator
-          `https://random-word-api.herokuapp.com/word?length=5&number=1&diff=1`
+          `https://random-word-api.herokuapp.com/word?number=1&diff=1`
         );
 
         const data = await result.json(); //stores response (array) from word generator
@@ -112,6 +130,7 @@ function App() {
       setHistory(prev => [ //add new round to history
       ...prev, 
       {
+        word, //original to be pushed when round
         scrambled,
         guesses: []
       }
@@ -125,9 +144,6 @@ function App() {
   //validate word via dictionary API (edge case issue where random word generator generates a word not found in dictionary - often because of tenses)
   //if valid, setWord, call scrambleWord and setScrambled
   //if invalid, loop
-
-
-  
 
   //------------------------------------------------------------------------
   //scramble word - fisher yates shuffle
@@ -147,11 +163,17 @@ function App() {
     return scrambledArr.join("");
   }
   
+  //------------------------------------------------------------------------
+//streamline checks
+
  //------------------------------------------------------------------------
   //check valid letters
  //comparing two hash maps of frequencies of letters
   
  const letterCheck = (word, guess) => {
+    word = word.toLowerCase(); //for capital letter edge case with user guesses
+    guess = guess.toLowerCase();
+
     //hash maps
     const wordMap = new Map (); //for frequency of letters in the original word array
     //word is ['g', 'r', 'a', 's', 's,']
@@ -183,33 +205,57 @@ function App() {
 
   //------------------------------------------------------------------------
   //check valid word using dictionary API
-   const validWordCheck = (guess) => {
-    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${guess}`)
-      .then((response) => {
-        if (!response.ok) {
-        throw new Error("Not a valid word"); //moves to catch
-      }
-      return response.json();
-      })
-      .then((data) => {
-        console.log("validWordCheck: valid word");
-        setIsValidGuess("Correct, nice job!"); 
-        historyPanel(guess, true); //after check, regardless of the correctness, prompts history panel
-      })
-      .catch((error) => {
-        console.log("Uknown Error.");
-        setIsValidGuess("Not a real word, but keep trying!");
-        historyPanel(guess, false); //after check, regardless of the correctness, prompts history panel
-      })
+   const validWordCheck = async (guess) => {
+    try {
+      const response = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${guess}`
+      );
+
+      return response.ok;
+    } catch(error) {
+      return false;
+    }
+  };
+
+   //------------------------------------------------------------------------
+   //helper function to handle states and function execution
+   const handleGuess = async () => {
+    console.log("User guessed:", guess);
+
+  //letter check
+  if (!letterCheck(word, guess)) {
+    setIsValidGuess("Try again using only the letters from the scrambled word.");
+    console.log("Guess invalid (letter check)");
+    return;
   }
+  //dictionary API check
+  const isRealWord = await validWordCheck(guess);
+
+  if (!isRealWord) {
+    setIsValidGuess("Not a real word, but keep trying!");
+    historyPanel(guess, false, 0);
+    setGuess("");
+    console.log("Guess not in dictionary");
+    return;
+  } 
+
+  const guessAdded = historyPanel(guess, true, guess.length);
+
+  if (guessAdded){
+    setIsValidGuess("Correct, nice job!");
+    setPoints(prev => prev + guess.length);
+  } else {
+    setIsValidGuess("You already guessed that word.")
+  }
+  setGuess(""); //refresh textfield to blank
+};
   
-
-
-
   //------------------------------------------------------------------------
 // history panel function for history array generation
 //tracks both correct and incorrect guesses
- const historyPanel = (guess, value) => { //updates history state with new guess
+ const historyPanel = (guess, value, points) => { //updates history state with new guess
+  let guessAdded = false;
+
   setHistory(prev => {
     if (prev.length === 0) return prev; //if there is no history, do nothing
 
@@ -220,12 +266,18 @@ function App() {
       g => g.guess.toLowerCase() === guess.toLowerCase()
     );
 
-    if (alreadyGuessed) return prev; //if already guessed, do nothing
-
-    currentRound.guesses.push({ guess, value }); //update state for history rendering
+    if (alreadyGuessed){
+      guessAdded = false;
+      return prev; //if already guessed, do nothing
+    }
+    
+    currentRound.guesses.push({ guess, value, points }); //update state for history rendering
+    guessAdded = true;
 
     return updated;
   });
+
+  return guessAdded;
 };
 
   //------------------------------------------------------------------------
@@ -245,13 +297,16 @@ function App() {
                 color: 'white',
                 mb: 1
                 }}>
-              Word Guesser  
+              Anagramble
             </Typography>
             <Typography variant="subtitle1" sx={{gap: 3, color: 'white', textAlign: 'center'}}>
               Try to find the real word that has been scrambled. 
             </Typography>
             <Typography variant="subtitle1" sx={{gap: 3, color: 'white', textAlign: 'center'}}>
               Your guess does not have to use every letter. 
+            </Typography>
+            <Typography variant="subtitle1" sx={{gap: 3, color: 'white', textAlign: 'center'}}>
+              You can make as many guesses as you want each round to get more points.
             </Typography>
             <Typography variant="subtitle1" sx={{gap: 3, color: 'white', textAlign: 'center'}}>
               Refresh the browser to start a new game.
@@ -261,7 +316,7 @@ function App() {
               sx = {{
               color: "#199229"
               }}
-              onClick={handleOpen}>Click for Instructions
+              onClick={handleOpen}>How To Play
             </Button>
 
             {/*Game instructions modal */}
@@ -289,11 +344,13 @@ function App() {
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
                 <ul>
                   <li> Guesses do not need to include every letter from the scrambled word, but they also can't contain any letters not in the scrambled word.  </li>
+                  <li> The scrambled word may be in any tense. For example, the dictionary treats "reals" as legitimate. </li>
                   <li> There may be one or more possible real words that work for each scrambled word.</li>
+                  <li> For each valid word you guess, you will get points equal to the number of letters.</li>
                 </ul>
                 </Typography>
-                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
-                  Winning conditions... </Typography>
+                  <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
+                  Play until you beat your personal high score, or until you don't want to play anymore. Thanks for trying my game! </Typography>
               </Box>
             </Modal>
           </Container>
@@ -356,16 +413,7 @@ function App() {
             <Button 
               variant="contained"
               size="large"
-              onClick={() => {
-                console.log("User guesed:", guess);
-                if(letterCheck(word, guess)){
-                  validWordCheck(guess)
-                  console.log("guess button: guess is valid");
-          
-                } else if (!letterCheck(word,guess)){
-                  setIsValidGuess("Try again using the letters from the scrambled word.");
-                  console.log("guess button: Guess is invalid");}
-                }}
+              onClick={handleGuess}
               sx={{ 
                 px: 4, 
                 bgcolor: 'var(--accent)', 
@@ -397,7 +445,7 @@ function App() {
             sx = {{
             color: "#199229"
             }}
-            onClick={handle2ndOpen}>HOW THIS GAME WAS MADE
+            onClick={handle2ndOpen}>HOW DOES THE GAME WORK
         </Button>
         <Modal 
               open={open2nd}
@@ -411,31 +459,32 @@ function App() {
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                width: 400,
+                width: 500,
                 bgcolor: '#16171d',
                 border: '2px solid #000',
                 boxShadow: 24,
                 p: 4,
                 }}>
-                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
-                  Insert game description here. </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
-                <ul>
-                  <li> Something here. </li>
-                  <li> More optional stuff here.</li>
-                </ul>
-                </Typography>
-                    <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
                   This game uses an API - think of it like a database stored on the internet - to generate a random word. </Typography>
                 <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
-                  The code for the website then scrambles the word randomly and the user can make their guess using a textField component and buttons.  </Typography>
-                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
-                  Think of this game as checking for "anagrams" which are words that can be rearranged into multiple other words: </Typography>
-                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
+                  The code then scrambles the word randomly and the player can make their guess by typing in the textfield and pressing a button.  </Typography>
+                  <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left'}}>
                 <ul>
-                  <li> "Listen" is a perfect anagram of "silent" because it uses every letter. </li>
-                  <li> "Head" is a partial anagram of "lampshade" because it does not use all the letters.</li>
+                  <li> The Guess button prompts a series of checks to see if:
+                    <ul>
+                      <li> the letters in the guess match the original word </li> 
+                      <li> the guess is a real word using another API that has the dictionary </li> 
+                    </ul>
+                  </li>
+                  <li> The New Word button prompts a new round where the word generation happens all over again. </li>
                 </ul>
+                </Typography>
+                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
+                  Every time you hit the guess button, so long as the letters are valid, the guess history will update and keep track of your score.</Typography>
+               <br/>
+                <Typography variant="subtitle1" sx={{ color: 'white', textAlign: 'left' }}>
+                  These APIs are not perfect and may produce a word that isn't actually real.
                 </Typography>
               </Box>
             </Modal>
@@ -499,7 +548,7 @@ function App() {
               display: "flex",
               alignItems: "center",
               gap: 4,
-              justifyContent: "center",
+              justifyContent: "space-between",
             }}
           >
             <Typography variant="body2">
@@ -512,6 +561,9 @@ function App() {
             >
               {item.value ? "✓" : "x"}
             </Typography>
+            <Typography variant="body2">
+            + {item.points} points
+            </Typography>
           </CardContent>
         </Card>
         ))}
@@ -520,11 +572,43 @@ function App() {
       </Box>
     </CardContent>
   </Card>
+  
+  {/* Right side underneath history panel */}
+  <Box 
+  sx={{ 
+    mt: 2, 
+    width: 320,
+    display: "flex", 
+    justifyContent: "space-between",
+    alignItems: "center",
+    }}>
+      
+    {/* Total points */}
+    <Card sx={{
+      minWidth: 120,
+      px: 2,
+      py: 1,
+      bgcolor: "#22242c",
+      color: "white",
+      textAlign: "center",
+      gap: 4
+      }}>
+      Total Points: {points} 
+    </Card>
+    {/*Snackbar popup with original word */}
+    <Button 
+      variant="contained" 
+      onClick={handleSnackBarClick}>Answer</Button>
+      <Snackbar
+      open={openSnackBar}
+      autoHideDuration={6000} //6 seconds
+      onClose={handleSnackBarClose}
+      message={word}
+    />
+  </Box>
+
+  </Box>
 </Box>
-
-
-</Box>
-
 </>
 )
 }
